@@ -10,9 +10,7 @@
 #CC 		= arm-openwrt-linux-gcc
 CFLAGS	= -Wall -Wno-unused-variable -Wunused-but-set-variable -Wpointer-sign
 INCS 	= -I./include
-#-I${STAGING_DIR}/toolchain-arm_arm1176jzf-s+vfp_gcc-7.5.0_musl_eabi/include
-LFLAGS  = -L.
-#-L${STAGING_DIR}/toolchain-arm_arm1176jzf-s+vfp_gcc-7.5.0_musl_eabi/lib -lm -lpthread -lrt
+LFLAGS  = -L. -lmodbus
 
 # change these to set the proper directories where each files should be
 SRCDIR   = source
@@ -28,7 +26,7 @@ rm       = rm -Rf
 TARGET=ems_simulator
  
 $(BINDIR)/$(TARGET): $(OBJECTS)
-	@$(CC) -o  $@ $(LFLAGS) $(OBJECTS)
+	@$(CC) -o  $@ $(OBJECTS) $(LFLAGS)
 	@#cp $(TARGET) ../Firmware/bin
 	@echo "Linking completed!"
 

@@ -9,8 +9,10 @@
 
 #CC 		= arm-openwrt-linux-gcc
 CFLAGS	= -Wall -Wno-unused-variable -Wunused-but-set-variable -Wpointer-sign
-#INCS 	= -I./include -I${STAGING_DIR}/toolchain-arm_arm1176jzf-s+vfp_gcc-7.5.0_musl_eabi/include
-#LFLAGS  = -L. -L${STAGING_DIR}/toolchain-arm_arm1176jzf-s+vfp_gcc-7.5.0_musl_eabi/lib -lm -lpthread -lrt
+INCS 	= -I./include
+#-I${STAGING_DIR}/toolchain-arm_arm1176jzf-s+vfp_gcc-7.5.0_musl_eabi/include
+LFLAGS  = -L.
+#-L${STAGING_DIR}/toolchain-arm_arm1176jzf-s+vfp_gcc-7.5.0_musl_eabi/lib -lm -lpthread -lrt
 
 # change these to set the proper directories where each files should be
 SRCDIR   = source
@@ -27,8 +29,8 @@ TARGET=ems_simulator
  
 $(BINDIR)/$(TARGET): $(OBJECTS)
 	@$(CC) -o  $@ $(LFLAGS) $(OBJECTS)
-	#cp $(TARGET) ../Firmware/bin
-	@echo "Linking complete!"
+	@#cp $(TARGET) ../Firmware/bin
+	@echo "Linking completed!"
 
 $(OBJECTS): $(OBJDIR)/%.o : $(SRCDIR)/%.c
 	@$(CC) $(INCS) $(CFLAGS) -c $< -o $@
@@ -40,4 +42,4 @@ clean:
 	@$(rm) $(BINDIR)/$(TARGET)
 	@echo $(OBJECTS)
 	@echo $(TARGET)
-	@echo "Cleanup complete!" 
+	@echo "Cleanup completed!"

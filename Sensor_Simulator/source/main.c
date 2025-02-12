@@ -191,6 +191,9 @@ INT32 main(INT32 argc, CHAR **argv, CHAR **envp)
 					modbus_free(simInst.ctx);
 					return RET_FAILURE;
 				}
+                #if DEBUG_LOG
+                fprintf(stdout,"Waiting for server request from Main Process\n", sensorID, power);
+                #endif
 				modbus_tcp_accept(simInst.ctx, &simInst.serverSocket);
                 simInst.state = STATE_SIMULATE_POWER;
 			}

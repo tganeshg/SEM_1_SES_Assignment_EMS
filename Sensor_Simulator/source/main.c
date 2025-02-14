@@ -118,7 +118,7 @@ static ERROR_CODE readArguments(INT32 argc, CHAR *argv[], UINT16 *sensorID, UINT
 *************************************************************************/
 static UINT16 simulatePowerConsumption(UINT16 minPower,UINT16 maxPower)
 {
-    srand((UINT32)time(NULL));
+    srand((UINT32)time(NULL) ^ getpid());
     return (UINT16)((rand() % (maxPower - minPower + 1)) + minPower);
 }
 
@@ -191,13 +191,20 @@ INT32 main(INT32 argc, CHAR **argv, CHAR **envp)
 					modbus_free(simInst.ctx);
 					return RET_FAILURE;
 				}
-                #if DEBUG_LOG
-                fprintf(stdout,"Waiting for server request from Main Process\n", sensorID, power);
-                #endif
-				modbus_tcp_accept(simInst.ctx, &simInst.serverSocket);
-                simInst.state = STATE_SIMULATE_POWER;
+                simInst.state = STATE_SIMULATE_ACCEPT;
 			}
             break;
+            case STATE_SIMULATE_ACCEPT:
+			{
+                #if DEBUG_LOG
+                fprintf(stdout,"Waiting for server request from Main Process..\n");
+                #endif
+				modbus_tcp_accept(simInst.ctx, &simInst.serverSocket);
+				// Enable debug mode for the Modbus context
+                modbus_set_debug(simInst.ctx, TRUE);
+                simInst.state = STATE_SIMULATE_POWER;
+			}
+			break;
             case STATE_SIMULATE_POWER:
 			{
                 simInst.power = simulatePowerConsumption(simInst.minPower, simInst.maxPower);
@@ -219,9 +226,16 @@ INT32 main(INT32 argc, CHAR **argv, CHAR **envp)
 				{
 					simInst.mbMapping->tab_registers[MODBUS_REGISTER_ADDRESS] = (UINT16)simInst.power;
 					modbus_reply(simInst.ctx, (UINT8 *)simInst.mbMapping->tab_registers, rc, simInst.mbMapping);
+					simInst.state = STATE_SIMULATE_POWER;
 				}
-
-				simInst.state = STATE_SIMULATE_POWER;
+				else
+				{
+					if(errno == ECONNRESET)
+					{
+						fprintf(stderr, "Socket disconnected: %s\n", modbus_strerror(errno));
+						simInst.state = STATE_SIMULATE_ACCEPT;
+					}
+				}
 			}
 			break;
             default:

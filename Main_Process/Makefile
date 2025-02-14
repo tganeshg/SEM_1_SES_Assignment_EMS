@@ -10,7 +10,7 @@
 #CC 		= arm-openwrt-linux-gcc
 CFLAGS	= -Wall -Wno-unused-variable -Wunused-but-set-variable -Wpointer-sign
 INCS 	= -I./include
-LFLAGS  = -L. -lmodbus -lsqlite3 -lmosquitto -lini
+LFLAGS  = -L. -lmodbus -lsqlite3 -lmosquitto
 
 # change these to set the proper directories where each files should be
 SRCDIR   = source

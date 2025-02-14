@@ -33,6 +33,7 @@
 *Macros
 */
 #define APP_VERSION				    "MP 1.0.0 13012018"
+#define MODBUS_DEBUG				FALSE
 #define DEBUG_LOG				    1
 
 //for Flags use only
@@ -48,27 +49,6 @@ extern UINT64 flag1;
 *Structure
 */
 #pragma pack(push,1)
-
-/*************************************************************************
-* @brief        Structure to hold the simulation instance data.
-*
-* @details      This structure contains all the necessary data for a simulation instance,
-*               including the state of the state machine, Modbus TCP port, sensor ID,
-*               power consumption range, power value, server socket, and Modbus context
-*               and mapping.
-*************************************************************************/
-typedef struct
-{
-    STATE_TYPE          state;          /**< The current state of the state machine */
-    UINT16              modbusPort;     /**< The Modbus TCP port */
-    UINT16              sensorID;       /**< The ID of the sensor */
-    UINT16              minPower;       /**< The minimum power consumption value */
-    UINT16              maxPower;       /**< The maximum power consumption value */
-    UINT16              power;          /**< The current power consumption value */
-    INT32               serverSocket;   /**< The server socket for Modbus TCP */
-    modbus_t            *ctx;           /**< The Modbus context */
-    modbus_mapping_t    *mbMapping;     /**< The Modbus mapping */
-} SIM_INSTANCE;
 
 #pragma pack(pop)
 

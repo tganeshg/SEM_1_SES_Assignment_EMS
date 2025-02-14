@@ -16,7 +16,9 @@
 
 /*** Includes ***/
 #include "general.h"
+#include "ini.h"
 
+#define MAX_SENS_SIMULATOR	3
 /*** Globals ***/
 UINT64 flag1;
 
@@ -32,9 +34,9 @@ typedef enum {
 
 /* Define structure to hold program arguments */
 typedef struct {
-    CHAR *sensorIP[3];
-    UINT16 sensorPort[3];
-    UINT16 readInterval[3];
+    CHAR *sensorIP[MAX_SENS_SIMULATOR];
+    UINT16 sensorPort[MAX_SENS_SIMULATOR];
+    UINT16 readInterval[MAX_SENS_SIMULATOR];
     CHAR *mqttIP;
     UINT16 mqttPort;
     CHAR *mqttUsername;
@@ -56,16 +58,14 @@ INT32 main(INT32 argc, CHAR **argv, CHAR **envp)
 {
     PROGRAM_ARGS args;
     STATE_TYPE state = STATE_INIT;
-    modbus_t *ctx[3] = {NULL, NULL, NULL};
+    modbus_t *ctx[MAX_SENS_SIMULATOR] = {NULL,NULL,NULL};
     sqlite3 *db = NULL;
     struct mosquitto *mosq = NULL;
-    UINT16 power[3] = {0, 0, 0};
+    UINT16 power[MAX_SENS_SIMULATOR] = {0,0,0};
     INT32 rc = 0;
 
-    if (readConfig("config.ini", &args) != RET_OK)
-    {
+    if (readConfig("source/config.ini", &args) != RET_OK)
         return RET_FAILURE;
-    }
 
     /* Initialize SQLite database */
     rc = sqlite3_open("sensor_data.db", &db);
@@ -100,35 +100,38 @@ INT32 main(INT32 argc, CHAR **argv, CHAR **envp)
     }
 
     if (args.mqttUsername && args.mqttPassword)
-    {
         mosquitto_username_pw_set(mosq, args.mqttUsername, args.mqttPassword);
-    }
 
     while (state != STATE_ERROR)
     {
         switch (state)
         {
             case STATE_INIT:
+			{
                 state = STATE_CONNECT_MODBUS;
-                break;
-
+			}
+            break;
             case STATE_CONNECT_MODBUS:
-                for (int i = 0; i < 3; i++)
+			{
+                for (int i = 0; i < MAX_SENS_SIMULATOR; i++)
                 {
                     if (connectModbus(&ctx[i], args.sensorIP[i], args.sensorPort[i]) != RET_OK)
                     {
                         state = STATE_ERROR;
                         break;
                     }
+					#if MODBUS_DEBUG
+                    // Enable debug mode for the Modbus context
+                    modbus_set_debug(ctx[i], TRUE);
+					#endif
                 }
                 if (state != STATE_ERROR)
-                {
                     state = STATE_READ_MODBUS;
-                }
-                break;
-
+			}
+            break;
             case STATE_READ_MODBUS:
-                for (int i = 0; i < 3; i++)
+			{
+                for (int i = 0; i < MAX_SENS_SIMULATOR; i++)
                 {
                     if (readModbus(ctx[i], &power[i]) != RET_OK)
                     {
@@ -137,13 +140,12 @@ INT32 main(INT32 argc, CHAR **argv, CHAR **envp)
                     }
                 }
                 if (state != STATE_ERROR)
-                {
                     state = STATE_INSERT_DB;
-                }
-                break;
-
+			}
+            break;
             case STATE_INSERT_DB:
-                for (int i = 0; i < 3; i++)
+			{
+                for (int i = 0; i < MAX_SENS_SIMULATOR; i++)
                 {
                     if (insertDB(db, i + 1, power[i]) != RET_OK)
                     {
@@ -152,34 +154,31 @@ INT32 main(INT32 argc, CHAR **argv, CHAR **envp)
                     }
                 }
                 if (state != STATE_ERROR)
-                {
                     state = STATE_PUBLISH_MQTT;
-                }
-                break;
-
+			}
+            break;
             case STATE_PUBLISH_MQTT:
+			{
                 if (publishMQTT(mosq, db, args.publishInterval) != RET_OK)
-                {
-                    state = STATE_ERROR;
-                }
+					state = STATE_ERROR;
                 else
                 {
-                    for (int i = 0; i < 3; i++)
+                    for (int i = 0; i < MAX_SENS_SIMULATOR; i++)
                     {
                         sleep(args.readInterval[i]);
                     }
                     state = STATE_READ_MODBUS;
                 }
-                break;
-
+			}
+            break;
             default:
                 state = STATE_ERROR;
-                break;
+            break;
         }
     }
 
     /* Cleanup */
-    for (int i = 0; i < 3; i++)
+    for (int i = 0; i < MAX_SENS_SIMULATOR; i++)
     {
         if (ctx[i])
         {
@@ -188,12 +187,10 @@ INT32 main(INT32 argc, CHAR **argv, CHAR **envp)
         }
     }
 
-    if (db)
-    {
+    if(db)
         sqlite3_close(db);
-    }
 
-    if (mosq)
+    if(mosq)
     {
         mosquitto_destroy(mosq);
         mosquitto_lib_cleanup();
@@ -216,34 +213,57 @@ INT32 main(INT32 argc, CHAR **argv, CHAR **envp)
 * @return       ERROR_CODE  Returns RET_OK if the configuration is successfully read and valid,
 *                           otherwise returns RET_FAILURE.
 *************************************************************************/
+static int iniHandler(void* user, const char* section, const char* name, const char* value)
+{
+    PROGRAM_ARGS* args = (PROGRAM_ARGS*)user;
+
+    if (strcmp(section, "sensor1") == 0) {
+        if (strcmp(name, "sensorIP") == 0) {
+            args->sensorIP[0] = strdup(value);
+        } else if (strcmp(name, "sensorPort") == 0) {
+            args->sensorPort[0] = (UINT16)atoi(value);
+        } else if (strcmp(name, "readInterval") == 0) {
+            args->readInterval[0] = (UINT16)atoi(value);
+        }
+    } else if (strcmp(section, "sensor2") == 0) {
+        if (strcmp(name, "sensorIP") == 0) {
+            args->sensorIP[1] = strdup(value);
+        } else if (strcmp(name, "sensorPort") == 0) {
+            args->sensorPort[1] = (UINT16)atoi(value);
+        } else if (strcmp(name, "readInterval") == 0) {
+            args->readInterval[1] = (UINT16)atoi(value);
+        }
+    } else if (strcmp(section, "sensor3") == 0) {
+        if (strcmp(name, "sensorIP") == 0) {
+            args->sensorIP[2] = strdup(value);
+        } else if (strcmp(name, "sensorPort") == 0) {
+            args->sensorPort[2] = (UINT16)atoi(value);
+        } else if (strcmp(name, "readInterval") == 0) {
+            args->readInterval[2] = (UINT16)atoi(value);
+        }
+    } else if (strcmp(section, "mqtt") == 0) {
+        if (strcmp(name, "mqttIP") == 0) {
+            args->mqttIP = strdup(value);
+        } else if (strcmp(name, "mqttPort") == 0) {
+            args->mqttPort = (UINT16)atoi(value);
+        } else if (strcmp(name, "mqttUsername") == 0) {
+            args->mqttUsername = strdup(value);
+        } else if (strcmp(name, "mqttPassword") == 0) {
+            args->mqttPassword = strdup(value);
+        } else if (strcmp(name, "publishInterval") == 0) {
+            args->publishInterval = (UINT16)atoi(value);
+        }
+    }
+
+    return 1;
+}
+
 static ERROR_CODE readConfig(const CHAR *filename, PROGRAM_ARGS *args)
 {
-    ini_t *config = ini_load(filename);
-    if (config == NULL)
-    {
+    if (ini_parse(filename, iniHandler, args) < 0) {
         fprintf(stderr, "Failed to load config file: %s\n", filename);
         return RET_FAILURE;
     }
-
-    args->sensorIP[0] = strdup(ini_get(config, "sensor1", "sensorIP"));
-    args->sensorPort[0] = (UINT16)atoi(ini_get(config, "sensor1", "sensorPort"));
-    args->readInterval[0] = (UINT16)atoi(ini_get(config, "sensor1", "readInterval"));
-
-    args->sensorIP[1] = strdup(ini_get(config, "sensor2", "sensorIP"));
-    args->sensorPort[1] = (UINT16)atoi(ini_get(config, "sensor2", "sensorPort"));
-    args->readInterval[1] = (UINT16)atoi(ini_get(config, "sensor2", "readInterval"));
-
-    args->sensorIP[2] = strdup(ini_get(config, "sensor3", "sensorIP"));
-    args->sensorPort[2] = (UINT16)atoi(ini_get(config, "sensor3", "sensorPort"));
-    args->readInterval[2] = (UINT16)atoi(ini_get(config, "sensor3", "readInterval"));
-
-    args->mqttIP = strdup(ini_get(config, "mqtt", "mqttIP"));
-    args->mqttPort = (UINT16)atoi(ini_get(config, "mqtt", "mqttPort"));
-    args->mqttUsername = strdup(ini_get(config, "mqtt", "mqttUsername"));
-    args->mqttPassword = strdup(ini_get(config, "mqtt", "mqttPassword"));
-    args->publishInterval = (UINT16)atoi(ini_get(config, "mqtt", "publishInterval"));
-
-    ini_free(config);
 
     if (!args->sensorIP[0] || !args->sensorPort[0] || !args->readInterval[0] ||
         !args->sensorIP[1] || !args->sensorPort[1] || !args->readInterval[1] ||
@@ -289,6 +309,7 @@ static ERROR_CODE connectModbus(modbus_t **ctx, const CHAR *ip, UINT16 port)
     {
         fprintf(stderr, "Connection failed: %s\n", modbus_strerror(errno));
         modbus_free(*ctx);
+		*ctx = NULL;
         return RET_FAILURE;
     }
 
@@ -308,15 +329,20 @@ static ERROR_CODE connectModbus(modbus_t **ctx, const CHAR *ip, UINT16 port)
 *************************************************************************/
 static ERROR_CODE readModbus(modbus_t *ctx, UINT16 *power)
 {
-    UINT16 tab_reg[1];
+    UINT8 tab_reg[MODBUS_TCP_MAX_ADU_LENGTH]={0};
+	UINT16 val=0;
+	const uint8_t raw_req[] = { 0xFF, MODBUS_FC_READ_HOLDING_REGISTERS, 0x00, 0x00, 0x00, 0x01 };
+	int req_length = modbus_send_raw_request(ctx, raw_req, 6 * sizeof(uint8_t));
 
-    if (modbus_read_registers(ctx, 0, 1, tab_reg) == -1)
+	if(modbus_receive_confirmation(ctx, tab_reg) == -1)
     {
         fprintf(stderr, "Failed to read registers: %s\n", modbus_strerror(errno));
         return RET_FAILURE;
     }
 
-    *power = tab_reg[0];
+	*power = tab_reg[1];
+	*power = (*power << 8) | tab_reg[0];
+
     return RET_OK;
 }
 
@@ -374,7 +400,7 @@ static ERROR_CODE publishMQTT(struct mosquitto *mosq, sqlite3 *db, UINT16 publis
     CHAR payload[2048];
     CHAR temp[256];
     INT32 rc;
-
+	return RET_OK;
     snprintf(sql, sizeof(sql), "SELECT Device_ID, Power_Consumption, Timestamp FROM SensorData WHERE Timestamp >= datetime('now', '-%d seconds');", publishInterval);
 
     rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);

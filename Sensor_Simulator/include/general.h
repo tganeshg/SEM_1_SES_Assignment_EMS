@@ -57,6 +57,7 @@
 typedef enum {
     STATE_INIT,            /**< Initial state */
     STATE_READ_SENSOR,     /**< State for reading sensor data */
+    STATE_SIMULATE_ACCEPT, /**< State for accept the socket */
     STATE_SIMULATE_POWER,  /**< State for simulating power consumption */
     STATE_OUTPUT_POWER,    /**< State for outputting power consumption */
     STATE_RESPOND_MODBUS,  /**< State for responding to Modbus queries */

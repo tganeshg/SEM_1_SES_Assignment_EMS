@@ -17,8 +17,11 @@
 /*** Includes ***/
 #include "general.h"
 
+#define MODBUS_DEBUG			modDebug
+#define DEBUG_LOG				debug
 /*** Globals ***/
-UINT64 flag1;
+UINT64	flag1;
+BOOL	debug,modDebug;
 
 SIM_INSTANCE	simInst;
 
@@ -44,6 +47,7 @@ static void printUsage(void)
     fprintf(stdout,"  -m <minPower>    Minimum power consumption,Should be positive value\n");
     fprintf(stdout,"  -M <maxPower>    Maximum power consumption,Should be positive value\n");
     fprintf(stdout,"  -p <modbusPort>  Modbus TCP port\n");
+    fprintf(stdout,"  -d		  	   Enable debug\n");
     fprintf(stdout,"  -h, --help       Show this help message and exit\n");
 }
 
@@ -68,7 +72,7 @@ static ERROR_CODE readArguments(INT32 argc, CHAR *argv[], UINT16 *sensorID, UINT
 {
     INT32 opt=0;
 
-	while ((opt = getopt(argc, argv, "s:m:M:p:h")) != RET_FAILURE)
+	while ((opt = getopt(argc, argv, "s:m:M:p:h:d")) != RET_FAILURE)
     {
         switch (opt)
         {
@@ -84,6 +88,9 @@ static ERROR_CODE readArguments(INT32 argc, CHAR *argv[], UINT16 *sensorID, UINT
             case 'p':
                 *modbusPort = (UINT16)atoi(optarg);
             break;
+            case 'd':
+				modDebug = debug = TRUE;
+            break;
             case 'h':
                 printUsage();
                 exit(RET_OK);
@@ -95,7 +102,7 @@ static ERROR_CODE readArguments(INT32 argc, CHAR *argv[], UINT16 *sensorID, UINT
         }
     }
 
-    if ((*sensorID == 0) || (*minPower > *maxPower) || (*modbusPort == 0))
+    if ((*sensorID < 0 && *sensorID > MAX_SENS_SIMULATOR) || (*minPower > *maxPower) || (*modbusPort == 0))
 	{
 		fprintf(stderr, "Invalid inputs\n");
 		printUsage();
@@ -132,12 +139,11 @@ static UINT16 simulatePowerConsumption(UINT16 minPower,UINT16 maxPower)
 *
 * @return       None
 *************************************************************************/
-#if DEBUG_LOG
 static void outputPowerConsumption(UINT16 sensorID, UINT16 power)
 {
     fprintf(stdout,"Sensor ID: %d, Power Consumption: %d watts\n", sensorID, power);
 }
-#endif
+
 /****************************************************************
 * Main
 ****************************************************************/
@@ -161,11 +167,20 @@ INT32 main(INT32 argc, CHAR **argv, CHAR **envp)
 	socklen_t addrLen = 0;
 	CHAR clientIp[INET_ADDRSTRLEN]={0};
     INT32 rc=0,clientSocket=0;
+	const CHAR *sensorName[MAX_SENS_SIMULATOR] = {"Fan","Air Conditioner","Refrigerator"};
 
-    if (readArguments(argc, argv, &simInst.sensorID, &simInst.minPower, &simInst.maxPower, &simInst.modbusPort) != RET_OK)
-        simInst.state = STATE_ERROR;
+    if(readArguments(argc, argv, &simInst.sensorID, &simInst.minPower, &simInst.maxPower, &simInst.modbusPort) != RET_OK)
+	{
+        return RET_FAILURE;
+	}
 
-    while (simInst.state != STATE_ERROR)
+	if(DEBUG_LOG)
+	{
+		fprintf(stdout,"\n<< EMS - Sensor Simulator (%s) v%s >>\n\n",sensorName[simInst.sensorID-1],APP_VERSION);
+		fprintf(stdout,"Sensor ID :%d\n\tRange of power %d to %d watts\n\tModbus Port : %d\n",simInst.sensorID, simInst.minPower, simInst.maxPower, simInst.modbusPort);
+	}
+
+	while (simInst.state != STATE_ERROR)
     {
         switch (simInst.state)
         {
@@ -201,9 +216,9 @@ INT32 main(INT32 argc, CHAR **argv, CHAR **envp)
             break;
             case STATE_SIMULATE_ACCEPT:
 			{
-                #if DEBUG_LOG
-                fprintf(stdout,"Waiting for server request from Main Process..\n");
-                #endif
+                if(DEBUG_LOG)
+					fprintf(stdout,"Waiting for server request from Main Process..\n");
+
 				clientSocket = modbus_tcp_accept(simInst.ctx, &simInst.serverSocket);
 				if(clientSocket == RET_FAILURE)
 				{
@@ -212,25 +227,26 @@ INT32 main(INT32 argc, CHAR **argv, CHAR **envp)
 				}
 				else
 				{
-					#if DEBUG_LOG
-					fprintf(stdout,"Accepted request from Main Process..\n");
-
-					// Get the IP address of the client
-					addrLen = sizeof(clientAddr);
-					if (getpeername(clientSocket, (struct sockaddr *)&clientAddr, &addrLen) == RET_FAILURE)
+					if(DEBUG_LOG)
 					{
-						perror("Get Peer Name of MP");
-						break;
-					}
+						fprintf(stdout,"Accepted request from Main Process..\n");
 
-					inet_ntop(AF_INET, &clientAddr.sin_addr, clientIp, INET_ADDRSTRLEN);
-					fprintf(stdout,"Client connected from IP: %s\n", clientIp);
-					#endif
+						// Get the IP address of the client
+						addrLen = sizeof(clientAddr);
+						if (getpeername(clientSocket, (struct sockaddr *)&clientAddr, &addrLen) == RET_FAILURE)
+						{
+							perror("Get Peer Name of MP");
+							break;
+						}
+
+						inet_ntop(AF_INET, &clientAddr.sin_addr, clientIp, INET_ADDRSTRLEN);
+						fprintf(stdout,"Client connected from IP: %s\n", clientIp);
+					}
 				}
 				// Enable debug mode for the Modbus context
-				#if MODBUS_DEBUG_LOG
-                modbus_set_debug(simInst.ctx, TRUE);
-				#endif
+				if(MODBUS_DEBUG)
+					modbus_set_debug(simInst.ctx, TRUE);
+
                 simInst.state = STATE_SIMULATE_POWER;
 			}
 			break;
@@ -242,9 +258,9 @@ INT32 main(INT32 argc, CHAR **argv, CHAR **envp)
             break;
             case STATE_OUTPUT_POWER:
 			{
-				#if DEBUG_LOG
-                outputPowerConsumption(simInst.sensorID, simInst.power);
-				#endif
+				if(DEBUG_LOG)
+					outputPowerConsumption(simInst.sensorID, simInst.power);
+
                 simInst.state = STATE_RESPOND_MODBUS;
 			}
             break;

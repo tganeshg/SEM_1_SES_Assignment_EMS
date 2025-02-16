@@ -17,9 +17,15 @@
 /*** Includes ***/
 #include "general.h"
 
+#define	CUR_SENS_SIMULATOR	curSs
+#define MODBUS_DEBUG		modDebug
+#define DEBUG_LOG			debug
+
 /*** Globals ***/
-UINT64 flag1;
+UINT64	flag1;
 MP_INST	mpInst;
+UINT16	curSs;
+BOOL	debug,modDebug;
 
 /****************************************************************
 * Private Function
@@ -83,15 +89,39 @@ static ERROR_CODE readConfig(const CHAR *filename, PROGRAM_ARGS *args)
         return RET_FAILURE;
     }
 
+	if(DEBUG_LOG)
+	{
+		fprintf(stdout,"Reading configuration..\n");
+		fprintf(stdout,"Number of sensor simulator : %d out of %d\n",CUR_SENS_SIMULATOR,MAX_SENS_SIMULATOR);
+	}
+
 	for(ssIdx=0;ssIdx < CUR_SENS_SIMULATOR;ssIdx++)
 	{
-		if(!args->sensorIP[ssIdx] || !args->sensorPort[ssIdx] || !args->readInterval[ssIdx] ||
-			!args->mqttIP || !args->publishInterval)
+		if(!args->sensorIP[ssIdx] || !args->sensorPort[ssIdx] || !args->readInterval[ssIdx] )
 		{
-			fprintf(stderr, "Invalid configuration values\n");
+			fprintf(stderr, "SS: Invalid configuration values\n");
 			return RET_FAILURE;
 		}
+		else
+		{
+			if(DEBUG_LOG)
+				fprintf(stdout,"Sensor ID : %d\n\tSensor simulator IP : %s\n\tPort: %d\n\tInterval : %d\n",
+							ssIdx,args->sensorIP[ssIdx],args->sensorPort[ssIdx],args->readInterval[ssIdx]);
+		}
 	}
+
+	if( !args->mqttIP || !args->publishInterval)
+	{
+		fprintf(stderr, "MQTT: Invalid configuration values\n");
+		return RET_FAILURE;
+	}
+	else
+	{
+		if(DEBUG_LOG)
+			fprintf(stdout,"\nMQTT Broker IP/URL : %s\nPort: %d\nInterval : %d\n",
+								args->mqttIP,args->mqttPort,args->publishInterval);
+	}
+
     if(args->publishInterval < MIN_MQTT_PUB_INTERVAL || args->publishInterval > MAX_MQTT_PUB_INTERVAL)
     {
         fprintf(stderr, "Error: MQTT publish interval must be between %d and %d seconds.\n",MIN_MQTT_PUB_INTERVAL,MAX_MQTT_PUB_INTERVAL);
@@ -116,9 +146,9 @@ static ERROR_CODE readConfig(const CHAR *filename, PROGRAM_ARGS *args)
 *************************************************************************/
 static ERROR_CODE connectModbus(modbus_t **ctx, const CHAR *ip, UINT16 port)
 {
-	#if DEBUG_LOG
-	fprintf(stdout, "Modbus Connecting to %s:%d\n",ip,port);
-	#endif
+	if(DEBUG_LOG)
+		fprintf(stdout, "Modbus Connecting to %s:%d\n",ip,port);
+
     *ctx = modbus_new_tcp(ip, port);
     if(*ctx == NULL)
     {
@@ -135,9 +165,8 @@ static ERROR_CODE connectModbus(modbus_t **ctx, const CHAR *ip, UINT16 port)
     }
 	else
 	{
-		#if DEBUG_LOG
-		fprintf(stdout, "Modbus Connected to %s:%d\n",ip,port);
-		#endif
+		if(DEBUG_LOG)
+			fprintf(stdout, "Modbus Connected to %s:%d\n",ip,port);
 	}
 
     return RET_OK;
@@ -169,9 +198,9 @@ static ERROR_CODE readModbus(modbus_t *ctx, UINT16 *power)
 
 	*power = tab_reg[1];
 	*power = (*power << 8) | tab_reg[0];
-	#if DEBUG_LOG
-	fprintf(stdout, "Received modbus data %d\n",*power);
-	#endif
+	if(DEBUG_LOG)
+		fprintf(stdout, "Received modbus data %d\n",*power);
+
     return RET_OK;
 }
 
@@ -199,9 +228,8 @@ static ERROR_CODE insertDB(sqlite3 *db, UINT16 sensorID, UINT16 power)
     }
 	else
 	{
-		#if DEBUG_LOG
-		fprintf(stdout, "Modbus data of sensor ID %d inserted to DB : %d\n",sensorID,power);
-		#endif
+		if(DEBUG_LOG)
+			fprintf(stdout, "Modbus data of sensor ID %d inserted to DB : %d\n",sensorID,power);
 	}
 
     /* Delete old data beyond 24 hours */
@@ -263,9 +291,9 @@ static ERROR_CODE publishMQTT(struct mosquitto *mosq, sqlite3 *db, UINT16 publis
 
     strcat(mpInst.payload, "]");
 
-    if(mosquitto_publish(mpInst.mosq, NULL, MQTT_TOPIC, strlen(mpInst.payload), mpInst.payload, 0, false) != MOSQ_ERR_SUCCESS)
+	if((rc = mosquitto_publish(mpInst.mosq, NULL, MQTT_TOPIC, strlen(mpInst.payload), mpInst.payload, 0, false)) != MOSQ_ERR_SUCCESS)
     {
-        fprintf(stderr, "Failed to publish message\n");
+        fprintf(stderr, "Failed to publish message: %s\n",mosquitto_strerror(rc));
         return RET_FAILURE;
     }
 
@@ -275,11 +303,11 @@ static ERROR_CODE publishMQTT(struct mosquitto *mosq, sqlite3 *db, UINT16 publis
 /* Callback for successful connection to the MQTT broker */
 static void on_connect(struct mosquitto *mosq, void *obj, int rc)
 {
-    if (rc == 0)
+    if(rc == 0)
 	{
-		#if DEBUG_LOG
-        fprintf(stdout,"Connected to MQTT broker successfully.\n");
-		#endif
+		SET_FLAG(MQTT_CONNECTED);
+		if(DEBUG_LOG)
+			fprintf(stdout,"Connected to MQTT broker successfully.\n");
 	}
     else
         fprintf(stderr, "Failed to connect to MQTT broker, return code: %d\n", rc);
@@ -288,17 +316,24 @@ static void on_connect(struct mosquitto *mosq, void *obj, int rc)
 /* Callback for successful message publication */
 static void on_publish(struct mosquitto *mosq, void *obj, int mid)
 {
-	#if DEBUG_LOG
-    fprintf(stdout,"Message published successfully, message ID: %d\n", mid);
-	#endif
+	if(DEBUG_LOG)
+		fprintf(stdout,"Message published successfully, message ID: %d\n", mid);
 }
 
 /* Callback for logging */
 static void on_log(struct mosquitto *mosq, void *obj, int level, const char *str)
 {
-	#if DEBUG_LOG
-    fprintf(stdout,"MQTT Log: %s\n", str);
-	#endif
+	if(DEBUG_LOG)
+		fprintf(stdout,"MQTT Log: %s\n", str);
+}
+
+static void printUsage(void)
+{
+    fprintf(stdout,"Usage: ems_mainProc [OPTIONS]\n");
+    fprintf(stdout,"Options:\n");
+    fprintf(stdout,"  -n <sensorID>    Sensor ID\n");
+    fprintf(stdout,"  -d		  	   Enable debug\n");
+    fprintf(stdout,"  -h, --help       Show this help message and exit\n");
 }
 
 /****************************************************************
@@ -306,62 +341,41 @@ static void on_log(struct mosquitto *mosq, void *obj, int level, const char *str
 ****************************************************************/
 INT32 main(INT32 argc, CHAR **argv, CHAR **envp)
 {
-    INT32 rc = 0;
+    INT32	rc = 0;
 	UINT16	idx = 0;
 
-    if(readConfig(CONFIG_FILE, &mpInst.args) != RET_OK)
-        return RET_FAILURE;
-
-    /* Initialize SQLite database */
-    rc = sqlite3_open(DB_NAME, &mpInst.db);
-    if(rc != SQLITE_OK)
+	while((rc = getopt(argc, argv, "n:h:d")) != RET_FAILURE)
     {
-        fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(mpInst.db));
-        return RET_FAILURE;
+        switch (rc)
+        {
+            case 'n':
+                curSs = (UINT16)atoi(optarg);
+            break;
+            case 'd':
+				modDebug = debug = TRUE;
+            break;
+            case 'h':
+                printUsage();
+                exit(RET_OK);
+			break;
+            default:
+				printUsage();
+                return RET_FAILURE;
+			break;
+        }
     }
 
-    /* Create table if not exists */
-    const CHAR *sql = "CREATE TABLE IF NOT EXISTS SensorData ("
-                      "ID INTEGER PRIMARY KEY AUTOINCREMENT, "
-                      "Device_ID INTEGER, "
-                      "Timestamp DATETIME DEFAULT CURRENT_TIMESTAMP, "
-                      "Power_Consumption INTEGER);";
-    rc = sqlite3_exec(mpInst.db, sql, 0, 0, 0);
-    if(rc != SQLITE_OK)
-    {
-        fprintf(stderr, "SQL error: %s\n", sqlite3_errmsg(mpInst.db));
-        sqlite3_close(mpInst.db);
+	if(curSs > MAX_SENS_SIMULATOR || curSs <= 0)
+	{
+		fprintf(stderr, "Invalid inputs\n");
+		printUsage();
         return RET_FAILURE;
-    }
+	}
 
-    /* Initialize MQTT */
-    mosquitto_lib_init();
-    mpInst.mosq = mosquitto_new("dsfgsdfg", true, NULL);
-    if(!mpInst.mosq)
-    {
-        fprintf(stderr, "Failed to create mosquitto instance\n");
-        sqlite3_close(mpInst.db);
-        return RET_FAILURE;
-    }
 
-    if(mpInst.args.mqttUsername && mpInst.args.mqttPassword)
-        mosquitto_username_pw_set(mpInst.mosq, mpInst.args.mqttUsername, mpInst.args.mqttPassword);
 
-    /* Set callbacks */
-    mosquitto_connect_callback_set(mpInst.mosq, on_connect);
-    mosquitto_publish_callback_set(mpInst.mosq, on_publish);
-    mosquitto_log_callback_set(mpInst.mosq, on_log);
-
-    /* Connect to MQTT broker */
-    rc = mosquitto_connect(mpInst.mosq, mpInst.args.mqttIP, mpInst.args.mqttPort, 60);
-    if(rc != MOSQ_ERR_SUCCESS)
-    {
-        fprintf(stderr, "Failed to connect to MQTT broker: %s\n", mosquitto_strerror(rc));
-        sqlite3_close(mpInst.db);
-        mosquitto_destroy(mpInst.mosq);
-        mosquitto_lib_cleanup();
-        return RET_FAILURE;
-    }
+	if(DEBUG_LOG)
+		fprintf(stdout,"\n<< EMS - Main Process v%s >>\n\n",APP_VERSION);
 
     while(mpInst.state != STATE_ERROR)
     {
@@ -369,9 +383,89 @@ INT32 main(INT32 argc, CHAR **argv, CHAR **envp)
         {
             case STATE_INIT:
 			{
-                mpInst.state = STATE_CONNECT_MODBUS;
+				if(readConfig(CONFIG_FILE, &mpInst.args) != RET_OK)
+				{
+					mpInst.state = STATE_ERROR;
+					break;
+				}
+
+				/* Initialize SQLite database */
+				rc = sqlite3_open(DB_NAME, &mpInst.db);
+				if(rc != SQLITE_OK)
+				{
+					fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(mpInst.db));
+					mpInst.state = STATE_ERROR;
+					break;
+				}
+
+				/* Create table if not exists */
+				const CHAR *sql = "CREATE TABLE IF NOT EXISTS SensorData ("
+								  "ID INTEGER PRIMARY KEY AUTOINCREMENT, "
+								  "Device_ID INTEGER, "
+								  "Timestamp DATETIME DEFAULT CURRENT_TIMESTAMP, "
+								  "Power_Consumption INTEGER);";
+				rc = sqlite3_exec(mpInst.db, sql, 0, 0, 0);
+				if(rc != SQLITE_OK)
+				{
+					fprintf(stderr, "SQL error: %s\n", sqlite3_errmsg(mpInst.db));
+					sqlite3_close(mpInst.db);
+					mpInst.state = STATE_ERROR;
+					break;
+				}
+
+				/* Initialize MQTT */
+				CLR_FLAG(MQTT_CONNECTED);
+				mosquitto_lib_init();
+				mpInst.mosq = mosquitto_new(MQTT_CLIENT_ID, true, &mpInst);
+				if(!mpInst.mosq)
+				{
+					fprintf(stderr, "Failed to create mosquitto instance\n");
+					sqlite3_close(mpInst.db);
+					mpInst.state = STATE_ERROR;
+					break;
+				}
+
+				if(mpInst.args.mqttUsername && mpInst.args.mqttPassword)
+					mosquitto_username_pw_set(mpInst.mosq, mpInst.args.mqttUsername, mpInst.args.mqttPassword);
+
+				/* Set callbacks */
+				mosquitto_connect_callback_set(mpInst.mosq, on_connect);
+				mosquitto_publish_callback_set(mpInst.mosq, on_publish);
+				mosquitto_log_callback_set(mpInst.mosq, on_log);
+
+				/* Connect to MQTT broker */
+				rc = mosquitto_connect(mpInst.mosq, mpInst.args.mqttIP, mpInst.args.mqttPort, 60);
+				if(rc != MOSQ_ERR_SUCCESS)
+				{
+					fprintf(stderr, "Failed to connect to MQTT broker: %s\n", mosquitto_strerror(rc));
+					sqlite3_close(mpInst.db);
+					mosquitto_destroy(mpInst.mosq);
+					mosquitto_lib_cleanup();
+					mpInst.state = STATE_ERROR;
+					break;
+				}
+				else
+				{
+					/* Create Mqtt Network Handle Thread */
+					rc = mosquitto_loop_start(mpInst.mosq);
+					if( rc != MOSQ_ERR_SUCCESS )
+					{
+						if(DEBUG_LOG)
+							fprintf(stderr,"Mqtt Loop thread start error..\n");
+
+						mpInst.state = STATE_ERROR;
+						break;
+					}
+				}
+                mpInst.state = STATE_CONNECT_MQTT;
 			}
             break;
+			case STATE_CONNECT_MQTT:
+			{
+				sleep(1);
+				mpInst.state = (CHECK_FLAG(MQTT_CONNECTED)) ? STATE_CONNECT_MODBUS : STATE_CONNECT_MQTT;
+			}
+			break;
             case STATE_CONNECT_MODBUS:
 			{
                 for(idx = 0; idx < CUR_SENS_SIMULATOR; idx++)
@@ -381,10 +475,12 @@ INT32 main(INT32 argc, CHAR **argv, CHAR **envp)
                         mpInst.state = STATE_ERROR;
                         break;
                     }
-					#if MODBUS_DEBUG
-                    // Enable debug mode for the Modbus context
-                    modbus_set_debug(mpInst.ctx[idx], TRUE);
-					#endif
+
+					if(MODBUS_DEBUG)
+					{
+						// Enable debug mode for the Modbus context
+						modbus_set_debug(mpInst.ctx[idx], TRUE);
+					}
                 }
                 if(mpInst.state != STATE_ERROR)
                     mpInst.state = STATE_READ_MODBUS;

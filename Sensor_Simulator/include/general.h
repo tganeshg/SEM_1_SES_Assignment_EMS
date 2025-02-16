@@ -30,13 +30,7 @@
 *Macros
 */
 #define APP_VERSION				    "SS 1.0.1 16022025"
-#define DEBUG_LOG				    TRUE
-#define MODBUS_DEBUG_LOG			FALSE
-
-/* Define sensor IDs */
-#define FAN_SENSOR_ID               1
-#define AC_SENSOR_ID                2
-#define FRIDGE_SENSOR_ID            3
+#define MAX_SENS_SIMULATOR			3
 
 /* Define power consumption ranges */
 #define FAN_MIN_POWER               10

@@ -132,11 +132,12 @@ static UINT16 simulatePowerConsumption(UINT16 minPower,UINT16 maxPower)
 *
 * @return       None
 *************************************************************************/
+#if DEBUG_LOG
 static void outputPowerConsumption(UINT16 sensorID, UINT16 power)
 {
     fprintf(stdout,"Sensor ID: %d, Power Consumption: %d watts\n", sensorID, power);
 }
-
+#endif
 /****************************************************************
 * Main
 ****************************************************************/
@@ -156,7 +157,11 @@ static void outputPowerConsumption(UINT16 sensorID, UINT16 power)
 ****************************************************************/
 INT32 main(INT32 argc, CHAR **argv, CHAR **envp)
 {
-    INT32 rc=0;
+	struct sockaddr_in clientAddr;
+	socklen_t addrLen = 0;
+	CHAR clientIp[INET_ADDRSTRLEN]={0};
+    INT32 rc=0,clientSocket=0;
+
     if (readArguments(argc, argv, &simInst.sensorID, &simInst.minPower, &simInst.maxPower, &simInst.modbusPort) != RET_OK)
         simInst.state = STATE_ERROR;
 
@@ -199,9 +204,33 @@ INT32 main(INT32 argc, CHAR **argv, CHAR **envp)
                 #if DEBUG_LOG
                 fprintf(stdout,"Waiting for server request from Main Process..\n");
                 #endif
-				modbus_tcp_accept(simInst.ctx, &simInst.serverSocket);
+				clientSocket = modbus_tcp_accept(simInst.ctx, &simInst.serverSocket);
+				if(clientSocket == RET_FAILURE)
+				{
+					fprintf(stderr,"Failed accept request from Main Process..\n");
+					break;
+				}
+				else
+				{
+					#if DEBUG_LOG
+					fprintf(stdout,"Accepted request from Main Process..\n");
+
+					// Get the IP address of the client
+					addrLen = sizeof(clientAddr);
+					if (getpeername(clientSocket, (struct sockaddr *)&clientAddr, &addrLen) == RET_FAILURE)
+					{
+						perror("Get Peer Name of MP");
+						break;
+					}
+
+					inet_ntop(AF_INET, &clientAddr.sin_addr, clientIp, INET_ADDRSTRLEN);
+					fprintf(stdout,"Client connected from IP: %s\n", clientIp);
+					#endif
+				}
 				// Enable debug mode for the Modbus context
+				#if MODBUS_DEBUG_LOG
                 modbus_set_debug(simInst.ctx, TRUE);
+				#endif
                 simInst.state = STATE_SIMULATE_POWER;
 			}
 			break;

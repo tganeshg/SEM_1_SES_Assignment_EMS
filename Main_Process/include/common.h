@@ -79,7 +79,8 @@ typedef enum
 typedef enum
 {
 	RET_FAILURE=-1,
-	RET_OK=0
+	RET_OK=0,
+	RET_SUCCESS
 }ERROR_CODE;
 
 #endif

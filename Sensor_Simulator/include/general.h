@@ -22,14 +22,16 @@
 #include <time.h>
 #include <unistd.h>
 #include <errno.h>
+#include <arpa/inet.h>
 #include <modbus/modbus.h>
 #include "common.h"
 
 /*
 *Macros
 */
-#define APP_VERSION				    "SS 1.0.0 13012018"
-#define DEBUG_LOG				    1
+#define APP_VERSION				    "SS 1.0.1 16022025"
+#define DEBUG_LOG				    TRUE
+#define MODBUS_DEBUG_LOG			FALSE
 
 /* Define sensor IDs */
 #define FAN_SENSOR_ID               1

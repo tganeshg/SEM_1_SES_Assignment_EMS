@@ -6,8 +6,8 @@ Energy Monitoring System - This is the assignment of the subject 'Software for E
 # libmodbus
 https://libmodbus.org/
 
-#For Server required tools
+# For Server required tools
 pip install flask flask-mqtt flask-socketio plotly pandas
 
-# Run the Python program:
+# Run the Python program
 python Server/mqtt_subscriber.py

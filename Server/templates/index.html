@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sensor Data Dashboard</title>
+    <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        .gauge-container {
+            display: flex;
+            justify-content: space-around;
+        }
+        .gauge {
+            width: 400px;
+            height: 400px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Sensor Data Dashboard</h1>
+    <div id="current-values">
+        <h2>Current Values</h2>
+        <div class="gauge-container">
+            <div id="gauge-1" class="gauge"></div>
+            <div id="gauge-2" class="gauge"></div>
+            <div id="gauge-3" class="gauge"></div>
+        </div>
+    </div>
+    <div id="line-graph">
+        <h2>Power Consumption Over Time</h2>
+        <div id="line-graph-container" style="width: 100%; height: 400px;"></div>
+    </div>
+    <div id="bar-graph">
+        <h2>Average Power Consumption Per Hour</h2>
+        <iframe src="/bar_graph" width="100%" height="400"></iframe>
+    </div>
+    <script>
+        var socket = io();
+
+        function updateGauges(data) {
+            data.forEach(function(item) {
+                var gaugeId = 'gauge-' + item[0];
+                var title;
+                switch (item[0]) {
+                    case 1:
+                        title = "Fan";
+                        break;
+                    case 2:
+                        title = "Air Conditioner";
+                        break;
+                    case 3:
+                        title = "Refrigerator";
+                        break;
+                }
+                var gaugeData = [{
+                    type: "indicator",
+                    mode: "gauge+number",
+                    value: item[1],
+                    title: { text: title },
+                    gauge: {
+                        axis: { range: [null, 1000] },
+                        bar: { color: "blue" },
+                        steps: [
+                            { range: [0, 250], color: "lightgreen" },
+                            { range: [250, 500], color: "yellow" },
+                            { range: [500, 750], color: "orange" },
+                            { range: [750, 1000], color: "red" }
+                        ]
+                    }
+                }];
+                Plotly.newPlot(gaugeId, gaugeData);
+            });
+        }
+
+        function updateLineGraph() {
+            $.get('/line_graph', function(data) {
+                $('#line-graph-container').html(data);
+            });
+        }
+
+        socket.on('update', function(data) {
+            $.get('/current_values', function(data) {
+                updateGauges(data);
+            });
+        });
+
+        setInterval(updateLineGraph, 1000);
+    </script>
+</body>
+</html>

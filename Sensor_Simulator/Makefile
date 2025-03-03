@@ -2,15 +2,21 @@
 #Energy Monitor System @ Febraury 2025#
 
 #cross compiler
-#STAGING_DIR = /media/ganesh/Mine/My_Raspi/OpenWrt/Image/openwrt-raspi-toolchain/staging_dir
+ifeq ($(RASPI), 1)
+	ROOT_DIR := /media/ganesh/New
+	export PATH := ${ROOT_DIR}/Raspi/openwrt/staging_dir/toolchain-arm_arm1176jzf-s+vfp_gcc-12.3.0_musl_eabi/bin:$(PATH)
+	export STAGING_DIR := ${ROOT_DIR}/Raspi/openwrt/staging_dir/
+	TARGET_INCLUDE=${ROOT_DIR}/Raspi/openwrt/staging_dir/target-arm_arm1176jzf-s+vfp_musl_eabi/usr/include
+	TARGET_LIB=${ROOT_DIR}/Raspi/openwrt/staging_dir/target-arm_arm1176jzf-s+vfp_musl_eabi/usr/lib
+	CC = arm-openwrt-linux-gcc
+	INCS 	= -I./include -I${TARGET_INCLUDE}
+	LFLAGS  = -L./ -L${TARGET_LIB} -lmodbus
+else
+	INCS 	= -I./include
+	LFLAGS  = -L./ -lmodbus
+endif
 
-#export PATH := ${STAGING_DIR}/toolchain-arm_arm1176jzf-s+vfp_gcc-7.5.0_musl_eabi/bin:$(PATH)
-#export STAGING_DIR := ${STAGING_DIR}
-
-#CC 		= arm-openwrt-linux-gcc
 CFLAGS	= -Wall -Wno-unused-variable -Wunused-but-set-variable -Wpointer-sign
-INCS 	= -I./include
-LFLAGS  = -L. -lmodbus
 
 # change these to set the proper directories where each files should be
 SRCDIR   = source

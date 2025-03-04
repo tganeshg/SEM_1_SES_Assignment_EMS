@@ -115,18 +115,39 @@ static ERROR_CODE readArguments(INT32 argc, CHAR *argv[], UINT16 *sensorID, UINT
 /*************************************************************************
 * @brief        Simulates power consumption within a specified range.
 *
-* @details      This function generates a random power consumption value within
+* @details      This function generates a gradual power consumption value within
 *               the specified minimum and maximum power range.
 *
 * @param[in]    minPower    The minimum power consumption value.
 * @param[in]    maxPower    The maximum power consumption value.
 *
-* @return       UINT16      Returns a random power consumption value within the specified range.
+* @return       UINT16      Returns a gradual power consumption value within the specified range.
 *************************************************************************/
-static UINT16 simulatePowerConsumption(UINT16 minPower,UINT16 maxPower)
+static UINT16 simulatePowerConsumption(UINT16 minPower, UINT16 maxPower)
 {
-    srand((UINT32)time(NULL) ^ getpid());
-    return (UINT16)((rand() % (maxPower - minPower + 1)) + minPower);
+    static UINT16 currentPower = 0;
+    static BOOL increasing = TRUE;
+	UINT16 num = 0;
+
+    if (currentPower == maxPower) {
+        currentPower = minPower;
+    }
+
+	srand((UINT32)time(NULL) ^ getpid());
+	num = (UINT16)(rand() % 4);
+    if (increasing) {
+        currentPower += num;
+        if (currentPower >= maxPower) {
+            increasing = FALSE;
+        }
+    } else {
+        currentPower -= num;
+        if (currentPower <= minPower) {
+            increasing = TRUE;
+        }
+    }
+
+    return currentPower;
 }
 
 /*************************************************************************

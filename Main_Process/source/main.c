@@ -31,6 +31,23 @@ BOOL	debug,modDebug;
 * Private Function
 ****************************************************************/
 /*************************************************************************
+* @brief        Generates a timestamp from the system RTC.
+*
+* @details      This function generates a timestamp in the format "YYYY-MM-DD HH:MM:SS"
+*               from the system RTC.
+*
+* @param[out]   buffer      Pointer to the buffer where the timestamp will be stored.
+* @param[in]    bufferSize  The size of the buffer.
+*
+* @return       void
+*************************************************************************/
+void generateTimestamp(char *buffer, size_t bufferSize)
+{
+    time_t now = time(NULL);
+    struct tm *t = localtime(&now);
+    strftime(buffer, bufferSize, "%Y-%m-%d %H:%M:%S", t);
+}
+/*************************************************************************
 * @brief        Reads configuration from a file.
 *
 * @details      This function reads and parses the configuration file provided
@@ -218,13 +235,19 @@ static ERROR_CODE readModbus(modbus_t *ctx, UINT16 *power)
 *************************************************************************/
 static ERROR_CODE insertDB(sqlite3 *db, UINT16 sensorID, UINT16 power)
 {
-    CHAR sql[256] = {0};
+    INT32 rc=0;
+    CHAR sql[SIZE_256] = {0};
     snprintf(sql, sizeof(sql), "INSERT INTO SensorData (Device_ID, Power_Consumption) VALUES (%d, %d);", sensorID, power);
 
     if(sqlite3_exec(db, sql, 0, 0, 0) != SQLITE_OK)
     {
         fprintf(stderr, "INSERT SQL error: %s\n", sqlite3_errmsg(db));
-        return RET_FAILURE;
+        /* Publish it directly to Server */
+        generateTimestamp(mpInst.timestamp, sizeof(mpInst.timestamp));
+        memset(sql,0,sizeof(sql));
+        snprintf(sql, sizeof(sql), "[{\"sensorID\": %d, \"power\": %d, \"Timestamp\": \"%s\"}]", sensorID, power, mpInst.timestamp);
+        if((rc = mosquitto_publish(mpInst.mosq, NULL, MQTT_TOPIC, strlen(sql), sql, 0, false)) != MOSQ_ERR_SUCCESS)
+            fprintf(stderr, "Failed to publish message: %s\n", mosquitto_strerror(rc));
     }
 	else
 	{
@@ -236,10 +259,7 @@ static ERROR_CODE insertDB(sqlite3 *db, UINT16 sensorID, UINT16 power)
 	memset(sql,0,sizeof(sql));
     snprintf(sql, sizeof(sql), "DELETE FROM SensorData WHERE Timestamp < datetime('now', '-1 day');");
     if(sqlite3_exec(db, sql, 0, 0, 0) != SQLITE_OK)
-    {
         fprintf(stderr, "DELETE SQL error: %s\n", sqlite3_errmsg(db));
-        return RET_FAILURE;
-    }
 
     return RET_OK;
 }
@@ -260,7 +280,7 @@ static ERROR_CODE insertDB(sqlite3 *db, UINT16 sensorID, UINT16 power)
 static ERROR_CODE publishMQTT(struct mosquitto *mosq, sqlite3 *db, UINT16 publishInterval)
 {
     sqlite3_stmt *stmt=NULL;
-    CHAR temp[256]={0};
+    CHAR temp[SIZE_256]={0};
     INT32 rc=0;
 
     snprintf(temp, sizeof(temp), "SELECT Device_ID, Power_Consumption, Timestamp FROM SensorData WHERE Timestamp >= datetime('now', '-%d seconds');", publishInterval);
@@ -291,12 +311,14 @@ static ERROR_CODE publishMQTT(struct mosquitto *mosq, sqlite3 *db, UINT16 publis
 
     strcat(mpInst.payload, "]");
 
-	if((rc = mosquitto_publish(mpInst.mosq, NULL, MQTT_TOPIC, strlen(mpInst.payload), mpInst.payload, 0, false)) != MOSQ_ERR_SUCCESS)
+    if(strlen(mpInst.payload) > MQTT_PAYLOAD_MIN_SIZE) // to check if there is any data to publish
     {
-        fprintf(stderr, "Failed to publish message: %s\n",mosquitto_strerror(rc));
-        return RET_FAILURE;
+        if((rc = mosquitto_publish(mpInst.mosq, NULL, MQTT_TOPIC, strlen(mpInst.payload), mpInst.payload, 0, false)) != MOSQ_ERR_SUCCESS)
+        {
+            fprintf(stderr, "Failed to publish message: %s\n",mosquitto_strerror(rc));
+            return RET_FAILURE;
+        }
     }
-
     return RET_OK;
 }
 
@@ -331,9 +353,9 @@ static void printUsage(void)
 {
     fprintf(stdout,"Usage: ems_mainProc [OPTIONS]\n");
     fprintf(stdout,"Options:\n");
-    fprintf(stdout,"  -n <sensorID>    Sensor ID\n");
-    fprintf(stdout,"  -d		  	   Enable debug\n");
-    fprintf(stdout,"  -h, --help       Show this help message and exit\n");
+    fprintf(stdout,"  -n <max sensor>       Max number of sensor simulator(Upto 3)\n");
+    fprintf(stdout,"  -d                    Enable debug\n");
+    fprintf(stdout,"  -h, --help            Show this help message and exit\n");
 }
 
 /****************************************************************
@@ -371,8 +393,6 @@ INT32 main(INT32 argc, CHAR **argv, CHAR **envp)
 		printUsage();
         return RET_FAILURE;
 	}
-
-
 
 	if(DEBUG_LOG)
 		fprintf(stdout,"\n<< EMS - Main Process v%s >>\n\n",APP_VERSION);
@@ -470,48 +490,35 @@ INT32 main(INT32 argc, CHAR **argv, CHAR **envp)
 			{
                 for(idx = 0; idx < CUR_SENS_SIMULATOR; idx++)
                 {
-                    if(connectModbus(&mpInst.ctx[idx], mpInst.args.sensorIP[idx], mpInst.args.sensorPort[idx]) != RET_OK)
+                    if(!mpInst.mConnected[idx] && connectModbus(&mpInst.ctx[idx], mpInst.args.sensorIP[idx], mpInst.args.sensorPort[idx]) != RET_OK)
                     {
-                        mpInst.state = STATE_ERROR;
-                        break;
+                        mpInst.mConnected[idx] = FALSE;
+                        continue;
                     }
+                    else
+                        mpInst.mConnected[idx] = TRUE;
 
-					if(MODBUS_DEBUG)
-					{
-						// Enable debug mode for the Modbus context
+					if(MODBUS_DEBUG) // Enable debug mode for the Modbus context
 						modbus_set_debug(mpInst.ctx[idx], TRUE);
-					}
-                }
-                if(mpInst.state != STATE_ERROR)
-                    mpInst.state = STATE_READ_MODBUS;
-			}
-            break;
-            case STATE_READ_MODBUS:
-			{
-                for(idx = 0; idx < CUR_SENS_SIMULATOR; idx++)
-                {
-                    if(readModbus(mpInst.ctx[idx], &mpInst.power[idx]) != RET_OK)
+
+                    if(mpInst.mConnected[idx])
                     {
-                        mpInst.state = STATE_ERROR;
-                        break;
+                        if(readModbus(mpInst.ctx[idx], &mpInst.power[idx]) != RET_OK)
+                            mpInst.mConnected[idx] = FALSE;
                     }
                 }
-                if(mpInst.state != STATE_ERROR)
-                    mpInst.state = STATE_INSERT_DB;
+
+                mpInst.state = STATE_INSERT_DB;
 			}
             break;
             case STATE_INSERT_DB:
 			{
                 for(idx = 0; idx < CUR_SENS_SIMULATOR; idx++)
                 {
-                    if(insertDB(mpInst.db, idx + 1, mpInst.power[idx]) != RET_OK)
-                    {
-                        mpInst.state = STATE_ERROR;
-                        break;
-                    }
+                    if(mpInst.mConnected[idx])
+                        insertDB(mpInst.db, (idx + 1), mpInst.power[idx]);
                 }
-                if(mpInst.state != STATE_ERROR)
-                    mpInst.state = STATE_PUBLISH_MQTT;
+                mpInst.state = STATE_PUBLISH_MQTT;
 			}
             break;
             case STATE_PUBLISH_MQTT:
@@ -523,7 +530,7 @@ INT32 main(INT32 argc, CHAR **argv, CHAR **envp)
                     for(idx = 0; idx < CUR_SENS_SIMULATOR; idx++)
                         sleep(mpInst.args.readInterval[idx]);
 
-                    mpInst.state = STATE_READ_MODBUS;
+                    mpInst.state = STATE_CONNECT_MODBUS;
                 }
 			}
             break;

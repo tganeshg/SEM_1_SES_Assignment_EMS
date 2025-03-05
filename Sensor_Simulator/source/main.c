@@ -47,7 +47,7 @@ static void printUsage(void)
     fprintf(stdout,"  -m <minPower>    Minimum power consumption,Should be positive value\n");
     fprintf(stdout,"  -M <maxPower>    Maximum power consumption,Should be positive value\n");
     fprintf(stdout,"  -p <modbusPort>  Modbus TCP port\n");
-    fprintf(stdout,"  -d		  	   Enable debug\n");
+    fprintf(stdout,"  -d		   Enable debug\n");
     fprintf(stdout,"  -h, --help       Show this help message and exit\n");
 }
 
@@ -134,7 +134,7 @@ static UINT16 simulatePowerConsumption(UINT16 minPower, UINT16 maxPower)
     }
 
 	srand((UINT32)time(NULL) ^ getpid());
-	num = (UINT16)(rand() % 4);
+	num = (UINT16)(rand() % 6);
     if (increasing) {
         currentPower += num;
         if (currentPower >= maxPower) {

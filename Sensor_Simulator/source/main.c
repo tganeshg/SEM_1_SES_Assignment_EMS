@@ -134,7 +134,7 @@ static UINT16 simulatePowerConsumption(UINT16 minPower, UINT16 maxPower)
     }
 
 	srand((UINT32)time(NULL) ^ getpid());
-	num = (UINT16)(rand() % 4);
+	num = (UINT16)(rand() % 6);
     if (increasing) {
         currentPower += num;
         if (currentPower >= maxPower) {

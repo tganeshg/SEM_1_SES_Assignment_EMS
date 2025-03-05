@@ -36,6 +36,7 @@
 #define MAX_SENS_SIMULATOR		3
 #define MIN_MQTT_PUB_INTERVAL	1
 #define MAX_MQTT_PUB_INTERVAL	59
+#define MQTT_PAYLOAD_MIN_SIZE   2
 
 #define CONFIG_FILE				"source/config.ini"
 #define MQTT_CLIENT_ID			"ems_main_proc"
@@ -90,6 +91,8 @@ typedef struct
     modbus_t			*ctx[MAX_SENS_SIMULATOR];
     sqlite3				*db;
     struct mosquitto	*mosq;
+    UINT8               mConnected[MAX_SENS_SIMULATOR];
+    CHAR                timestamp[SIZE_32];
     UINT16				power[MAX_SENS_SIMULATOR];
     CHAR				payload[SIZE_2048];
 }MP_INST;

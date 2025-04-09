@@ -38,10 +38,10 @@
 #define MAX_MQTT_PUB_INTERVAL	59
 #define MQTT_PAYLOAD_MIN_SIZE   2
 
-#define CONFIG_FILE				"source/config.ini"
+#define CONFIG_FILE				"/root/config/config.ini"
 #define MQTT_CLIENT_ID			"ems_main_proc"
 #define MQTT_TOPIC				"sensor/data"
-#define DB_NAME					"sensor_data.db"
+#define DB_NAME					"/root/sensor_data.db"
 
 //for Flags use only
 extern UINT64 flag1;

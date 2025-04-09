@@ -32,7 +32,7 @@
 /*
 *Macros
 */
-#define APP_VERSION				"MP 1.0.1 16022025"
+#define APP_VERSION				"MP 1.2.0 09042025"
 #define MAX_SENS_SIMULATOR		3
 #define MIN_MQTT_PUB_INTERVAL	1
 #define MAX_MQTT_PUB_INTERVAL	59

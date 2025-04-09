@@ -29,7 +29,7 @@
 /*
 *Macros
 */
-#define APP_VERSION				    "SS 1.0.1 16022025"
+#define APP_VERSION				    "SS 1.2.0 09042025"
 #define MAX_SENS_SIMULATOR			3
 
 /* Define power consumption ranges */

@@ -61,13 +61,17 @@
                     value: item[1],
                     title: { text: title },
                     gauge: {
-                        axis: { range: [null, 1000] },
+						axis: {
+							range: [0, 1600],
+							tickvals: [0, 400, 800, 1200, 1600],
+							ticktext: ["0", "400", "800", "1200", "1600"]
+						},
                         bar: { color: "blue" },
                         steps: [
-                            { range: [0, 250], color: "lightgreen" },
-                            { range: [250, 500], color: "yellow" },
-                            { range: [500, 750], color: "orange" },
-                            { range: [750, 1000], color: "red" }
+                            { range: [0, 400], color: "lightgreen" },
+                            { range: [400, 800], color: "yellow" },
+                            { range: [800, 1200], color: "orange" },
+                            { range: [1200, 1600], color: "red" }
                         ]
                     }
                 }];
